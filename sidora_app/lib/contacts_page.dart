@@ -9,9 +9,9 @@ class ContactsPage extends StatefulWidget {
 
 class _ContactsPageState extends State<ContactsPage> {
   final List<Map<String, String>> _kisiler = [
-    {'isim': 'Anne', 'telefon': '+90 555 123 4567', 'oncelik': '1. Öncelik'},
-    {'isim': 'Baba', 'telefon': '+90 555 987 6543', 'oncelik': '2. Öncelik'},
-    {'isim': 'Kardeş', 'telefon': '+90 555 456 7890', 'oncelik': '3. Öncelik'},
+    {'isim': 'Anne', 'telefon': '+90 555 123 4567', 'oncelik': '1. Derece'},
+    {'isim': 'Baba', 'telefon': '+90 555 987 6543', 'oncelik': '2. Derece'},
+    {'isim': 'Kardeş', 'telefon': '+90 555 456 7890', 'oncelik': '3. Derece'},
   ];
 
   void _kisiEkleDialog() {
@@ -21,40 +21,62 @@ class _ContactsPageState extends State<ContactsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Yeni Acil Kişi Ekle'),
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Acil Durum Kişisi',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0D3B2E)),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: isimController,
-              decoration: const InputDecoration(labelText: 'Yakınlık / İsim (Örn: Teyze)'),
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                labelText: 'Kişi / Yakınlık',
+                labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF7A8D85)),
+                isDense: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
+            const SizedBox(height: 12),
             TextField(
               controller: telController,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Telefon Numarası'),
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                labelText: 'Telefon Numarası',
+                labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF7A8D85)),
+                isDense: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal'),
+            child: const Text('Vazgeç', style: TextStyle(color: Colors.grey, fontSize: 13)),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF0D3B2E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () {
               if (isimController.text.isNotEmpty && telController.text.isNotEmpty) {
                 setState(() {
                   _kisiler.add({
                     'isim': isimController.text,
                     'telefon': telController.text,
-                    'oncelik': '${_kisiler.length + 1}. Öncelik',
+                    'oncelik': '${_kisiler.length + 1}. Derece',
                   });
                 });
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('Kaydet'),
+            child: const Text('Ekle', style: TextStyle(fontSize: 13)),
           ),
         ],
       ),
@@ -64,9 +86,8 @@ class _ContactsPageState extends State<ContactsPage> {
   void _kisiSil(int index) {
     setState(() {
       _kisiler.removeAt(index);
-      // Öncelik numaralarını yeniden güncelle
       for (int i = 0; i < _kisiler.length; i++) {
-        _kisiler[i]['oncelik'] = '${i + 1}. Öncelik';
+        _kisiler[i]['oncelik'] = '${i + 1}. Derece';
       }
     });
   }
@@ -74,70 +95,131 @@ class _ContactsPageState extends State<ContactsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F9F8),
       appBar: AppBar(
-        title: const Text('Acil Durum Kişileri', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'GÜVENLİK REHBERİ',
+          style: TextStyle(
+            color: Color(0xFF0D3B2E),
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
+          ),
+        ),
         centerTitle: true,
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
+          constraints: const BoxConstraints(maxWidth: 440),
           child: Column(
             children: [
+              // Minimalist Bilgi Notu
               Container(
-                margin: const EdgeInsets.all(16),
+                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.indigo.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.indigo.shade200),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFF0D3B2E).withOpacity(0.08)),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.indigo),
-                    SizedBox(width: 12),
-                    Expanded(
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F1EC),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.lock_clock_outlined, size: 16, color: Color(0xFF0D3B2E)),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
                       child: Text(
-                        'SOS tetiklendiğinde konum ve kanıt zinciri sırayla bu kişilere SMS ve arama ile iletilir.',
-                        style: TextStyle(fontSize: 13, color: Colors.indigo),
+                        'Otonom alarm anında konum ve şifreli ses kaydı öncelik sırasına göre iletilir.',
+                        style: TextStyle(fontSize: 11, color: Color(0xFF5A6E65), height: 1.3),
                       ),
                     ),
                   ],
                 ),
               ),
+
+              // Liste
               Expanded(
                 child: _kisiler.isEmpty
-                    ? const Center(child: Text('Henüz acil durum kişisi eklenmedi.'))
+                    ? const Center(
+                        child: Text(
+                          'Kayıtlı kişi bulunmuyor',
+                          style: TextStyle(fontSize: 12, color: Color(0xFF8A9A93)),
+                        ),
+                      )
                     : ListView.builder(
                         itemCount: _kisiler.length,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                         itemBuilder: (context, index) {
                           final kisi = _kisiler[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.black.withOpacity(0.03)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.015),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
                             child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.indigo.shade100,
-                                child: Icon(Icons.person, color: Colors.indigo.shade900),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                              leading: Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8F1EC),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.person_outline, size: 18, color: Color(0xFF0D3B2E)),
                               ),
-                              title: Text(kisi['isim']!, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text(kisi['telefon']!),
+                              title: Text(
+                                kisi['isim']!,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF1E2D27),
+                                ),
+                              ),
+                              subtitle: Text(
+                                kisi['telefon']!,
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF7A8D85)),
+                              ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
-                                      color: Colors.indigo.shade50,
-                                      borderRadius: BorderRadius.circular(12),
+                                      color: const Color(0xFFF9F5EC),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFFC5A059).withOpacity(0.3)),
                                     ),
                                     child: Text(
                                       kisi['oncelik']!,
-                                      style: TextStyle(fontSize: 11, color: Colors.indigo.shade700, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                        fontSize: 9.5,
+                                        color: Color(0xFF9E7830),
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
+                                  const SizedBox(width: 4),
                                   IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                    icon: const Icon(Icons.delete_outline, size: 17, color: Color(0xFFA5B2AC)),
+                                    hoverColor: Colors.transparent,
+                                    splashRadius: 18,
                                     onPressed: () => _kisiSil(index),
                                   ),
                                 ],
@@ -153,8 +235,13 @@ class _ContactsPageState extends State<ContactsPage> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _kisiEkleDialog,
-        icon: const Icon(Icons.person_add),
-        label: const Text('Kişi Ekle'),
+        elevation: 2,
+        backgroundColor: const Color(0xFF0D3B2E),
+        icon: const Icon(Icons.add, size: 16, color: Colors.white),
+        label: const Text(
+          'Kişi Ekle',
+          style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+        ),
       ),
     );
   }
