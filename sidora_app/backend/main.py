@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Mobil / Web bağlantı izinleri (CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,7 +14,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# SQLite Veri Tabanı İlklendirme
 def init_db():
     conn = sqlite3.connect("sidora_kanit.db")
     cursor = conn.cursor()
@@ -24,6 +22,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             dosya_adi TEXT,
             sha256_hash TEXT,
+            onceki_hash TEXT,
+            zincir_hash TEXT,
             yukleme_tarihi TEXT
         )
     ''')
@@ -38,21 +38,29 @@ def health_check():
 
 @app.post("/upload")
 async def upload_audio(file: UploadFile = File(...)):
-    # Dosya içeriğini oku
     content = await file.read()
     
-    # SHA-256 Hash hesapla
-    sha256_hash = hashlib.sha256(content).hexdigest()
+    # 1. Dosyanın ham SHA-256 özetini al
+    dosya_hash = hashlib.sha256(content).hexdigest()
     
-    # Tarih damgası al
-    zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Veri tabanına yaz
+    # 2. Veritabanındaki en son zincir hash'ini çek
     conn = sqlite3.connect("sidora_kanit.db")
     cursor = conn.cursor()
+    cursor.execute("SELECT zincir_hash FROM kanitlar ORDER BY id DESC LIMIT 1")
+    son_kayit = cursor.fetchone()
+    
+    onceki_hash = son_kayit[0] if son_kayit else "GENESIS_BLOCK_SIDORA_00000000000000000000000000000000"
+    
+    # 3. Önceki hash ile yeni dosya hash'ini birleştirip yeni zincir hash'i üret
+    birlesik = f"{onceki_hash}{dosya_hash}"
+    zincir_hash = hashlib.sha256(birlesik.encode('utf-8')).hexdigest()
+    
+    zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 4. Veritabanına kaydet
     cursor.execute(
-        "INSERT INTO kanitlar (dosya_adi, sha256_hash, yukleme_tarihi) VALUES (?, ?, ?)",
-        (file.filename, sha256_hash, zaman)
+        "INSERT INTO kanitlar (dosya_adi, sha256_hash, onceki_hash, zincir_hash, yukleme_tarihi) VALUES (?, ?, ?, ?, ?)",
+        (file.filename, dosya_hash, onceki_hash, zincir_hash, zaman)
     )
     conn.commit()
     conn.close()
@@ -60,6 +68,27 @@ async def upload_audio(file: UploadFile = File(...)):
     return {
         "status": "success",
         "dosya_adi": file.filename,
-        "sha256": sha256_hash,
+        "dosya_hash": dosya_hash,
+        "zincir_hash": zincir_hash,
         "tarih": zaman
     }
+
+# Doğrulama Uç Noktası (Olay Geçmişi ve Zincir Sağlamlık Kontrolü)
+@app.get("/events")
+def get_events():
+    conn = sqlite3.connect("sidora_kanit.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, dosya_adi, sha256_hash, zincir_hash, yukleme_tarihi FROM kanitlar ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    olaylar = []
+    for r in rows:
+        olaylar.append({
+            "id": r[0],
+            "dosya_adi": r[1],
+            "sha256": r[2],
+            "zincir_hash": r[3],
+            "tarih": r[4]
+        })
+    return {"toplam_olay": len(olaylar), "olaylar": olaylar}
