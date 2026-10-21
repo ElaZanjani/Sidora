@@ -46,3 +46,8 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+__pycache__/
+*.wav
+*.m4a
+.dart_tool/
+build/

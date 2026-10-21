@@ -1,5 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class SosPage extends StatefulWidget {
   const SosPage({super.key});
@@ -12,6 +16,80 @@ class _SosPageState extends State<SosPage> {
   Timer? _timer;
   int _kalan = 0;
   bool _gonderildi = false;
+  
+  // Ses Kayıt ve Yükleme Mantığı
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  bool _kayitEdiliyor = false;
+  String? _sonKayitYolu;
+  String? _sonHash;
+  bool _yukleniyor = false;
+
+  Future<void> _kayitBaslat() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        final dir = await getTemporaryDirectory();
+        final filePath = '${dir.path}/sidora_alarm_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        
+        await _audioRecorder.start(
+          const RecordConfig(encoder: AudioEncoder.aacLc),
+          path: filePath,
+        );
+        setState(() {
+          _kayitEdiliyor = true;
+          _sonKayitYolu = filePath;
+          _sonHash = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Kayıt başlatma hatası: $e');
+    }
+  }
+
+  Future<void> _kayitDurdurAndYukle() async {
+    try {
+      final path = await _audioRecorder.stop();
+      setState(() {
+        _kayitEdiliyor = false;
+        _sonKayitYolu = path;
+      });
+      debugPrint('Ses kaydı tamamlandı: $path');
+
+      if (path != null) {
+        await _sunucuyaYukle(path);
+      }
+    } catch (e) {
+      debugPrint('Kayıt durdurma hatası: $e');
+    }
+  }
+
+  // FastAPI Sunucusuna /upload isteği gönderir ve SHA-256 hash alır
+  Future<void> _sunucuyaYukle(String filePath) async {
+    setState(() => _yukleniyor = true);
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://127.0.0.1:8000/upload'),
+      );
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body);
+        setState(() {
+          _sonHash = data['sha256'];
+        });
+        debugPrint('Kanıt Hash Mühürü: $_sonHash');
+      } else {
+        debugPrint('Sunucu hatası: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Sunucuya yükleme bağlantı hatası: $e');
+    } finally {
+      setState(() => _yukleniyor = false);
+    }
+  }
 
   void _sosBasildi() {
     setState(() {
@@ -26,6 +104,7 @@ class _SosPageState extends State<SosPage> {
           _kalan = 0;
           _gonderildi = true;
         });
+        _kayitBaslat();
       } else {
         setState(() => _kalan--);
       }
@@ -34,6 +113,9 @@ class _SosPageState extends State<SosPage> {
 
   void _iptal() {
     _timer?.cancel();
+    if (_kayitEdiliyor) {
+      _kayitDurdurAndYukle();
+    }
     setState(() {
       _kalan = 0;
       _gonderildi = false;
@@ -43,6 +125,7 @@ class _SosPageState extends State<SosPage> {
   @override
   void dispose() {
     _timer?.cancel();
+    _audioRecorder.dispose();
     super.dispose();
   }
 
@@ -76,6 +159,24 @@ class _SosPageState extends State<SosPage> {
                 letterSpacing: 3.5,
               ),
             ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC5A059).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFFC5A059), width: 0.8),
+              ),
+              child: const Text(
+                'DEMO',
+                style: TextStyle(
+                  color: Color(0xFF9E7830),
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
           ],
         ),
         centerTitle: true,
@@ -88,7 +189,6 @@ class _SosPageState extends State<SosPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Minimal Durum Kapsülü
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -115,25 +215,38 @@ class _SosPageState extends State<SosPage> {
                         width: 7,
                         height: 7,
                         decoration: BoxDecoration(
-                          color: _gonderildi ? const Color(0xFFB33939) : const Color(0xFF2E8B57),
+                          color: _kayitEdiliyor
+                              ? Colors.red
+                              : _gonderildi
+                                  ? const Color(0xFFB33939)
+                                  : const Color(0xFF2E8B57),
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        _gonderildi ? 'Kritik Durum Tetiklendi' : 'Korumalı • Otonom Dinleme',
+                        _kayitEdiliyor
+                            ? 'Ses Kaydı Alınıyor (Ortam Dinlemede)...'
+                            : _yukleniyor
+                                ? 'Kanıt Sunucuya Yükleniyor...'
+                                : _gonderildi
+                                    ? 'Kritik Durum Tetiklendi'
+                                    : 'Korumalı • Otonom Dinleme',
                         style: TextStyle(
                           fontSize: 12,
                           letterSpacing: 0.3,
                           fontWeight: FontWeight.w600,
-                          color: _gonderildi ? const Color(0xFFB33939) : const Color(0xFF2C3E35),
+                          color: _kayitEdiliyor
+                              ? Colors.red.shade800
+                              : _gonderildi
+                                  ? const Color(0xFFB33939)
+                                  : const Color(0xFF2C3E35),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                // Lüks Squircle SOS Butonu
                 GestureDetector(
                   onTap: bekliyor ? null : _sosBasildi,
                   child: AnimatedContainer(
@@ -141,7 +254,6 @@ class _SosPageState extends State<SosPage> {
                     width: 210,
                     height: 210,
                     decoration: BoxDecoration(
-                      // Squircle (Yumuşak modern dikdörtgen-oval form)
                       borderRadius: BorderRadius.circular(bekliyor ? 60 : 48),
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
@@ -197,18 +309,29 @@ class _SosPageState extends State<SosPage> {
                   ),
                 ),
 
-                // İptal Butonu ve Alt Açıklama
                 Column(
                   children: [
+                    if (_sonHash != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Text(
+                          'SHA-256 Mühür: ${_sonHash!.substring(0, 12)}...',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF2E8B57),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     SizedBox(
                       height: 44,
-                      child: bekliyor
+                      child: bekliyor || _kayitEdiliyor
                           ? TextButton.icon(
                               onPressed: _iptal,
-                              icon: const Icon(Icons.close, size: 16, color: Color(0xFF8A3B3B)),
-                              label: const Text(
-                                'İptal Et (Yanlış Alarm)',
-                                style: TextStyle(
+                              icon: const Icon(Icons.stop, size: 16, color: Color(0xFF8A3B3B)),
+                              label: Text(
+                                _kayitEdiliyor ? 'Kaydı Durdur & Mühürle' : 'İptal Et (Yanlış Alarm)',
+                                style: const TextStyle(
                                   color: Color(0xFF8A3B3B),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
