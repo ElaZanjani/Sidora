@@ -1,3 +1,4 @@
+import os
 import hashlib
 import sqlite3
 from datetime import datetime
@@ -40,10 +41,18 @@ def health_check():
 async def upload_audio(file: UploadFile = File(...)):
     content = await file.read()
     
-    # 1. Dosyanın ham SHA-256 özetini al
+    # 1. Dosyanın SHA-256 hash'ini hesapla
     dosya_hash = hashlib.sha256(content).hexdigest()
     
-    # 2. Veritabanındaki en son zincir hash'ini çek
+    # 2. Fiziksel olarak 'uploads' klasörüne kaydet
+    os.makedirs("uploads", exist_ok=True)
+    uzanti = os.path.splitext(os.path.basename(file.filename or ""))[1]
+    if not uzanti:
+        uzanti = ".m4a"
+    with open(os.path.join("uploads", dosya_hash + uzanti), "wb") as f:
+        f.write(content)
+    
+    # 3. Önceki zincir hash'ini çek
     conn = sqlite3.connect("sidora_kanit.db")
     cursor = conn.cursor()
     cursor.execute("SELECT zincir_hash FROM kanitlar ORDER BY id DESC LIMIT 1")
@@ -51,13 +60,12 @@ async def upload_audio(file: UploadFile = File(...)):
     
     onceki_hash = son_kayit[0] if son_kayit else "GENESIS_BLOCK_SIDORA_00000000000000000000000000000000"
     
-    # 3. Önceki hash ile yeni dosya hash'ini birleştirip yeni zincir hash'i üret
+    # 4. Yeni zincir hash'i oluştur
     birlesik = f"{onceki_hash}{dosya_hash}"
     zincir_hash = hashlib.sha256(birlesik.encode('utf-8')).hexdigest()
-    
     zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # 4. Veritabanına kaydet
+    # 5. Veritabanına kaydet
     cursor.execute(
         "INSERT INTO kanitlar (dosya_adi, sha256_hash, onceki_hash, zincir_hash, yukleme_tarihi) VALUES (?, ?, ?, ?, ?)",
         (file.filename, dosya_hash, onceki_hash, zincir_hash, zaman)
@@ -73,7 +81,6 @@ async def upload_audio(file: UploadFile = File(...)):
         "tarih": zaman
     }
 
-# Doğrulama Uç Noktası (Olay Geçmişi ve Zincir Sağlamlık Kontrolü)
 @app.get("/events")
 def get_events():
     conn = sqlite3.connect("sidora_kanit.db")
@@ -92,3 +99,21 @@ def get_events():
             "tarih": r[4]
         })
     return {"toplam_olay": len(olaylar), "olaylar": olaylar}
+
+# Adli Hash Zinciri Sağlamlık Doğrulama Uç Noktası
+@app.get("/verify")
+def verify_chain():
+    conn = sqlite3.connect("sidora_kanit.db")
+    rows = conn.execute(
+        "SELECT id, sha256_hash, onceki_hash, zincir_hash FROM kanitlar ORDER BY id ASC"
+    ).fetchall()
+    conn.close()
+    
+    onceki = "GENESIS_BLOCK_SIDORA_00000000000000000000000000000000"
+    for id_, dosya_hash, kayitli_onceki, kayitli_zincir in rows:
+        beklenen = hashlib.sha256(f"{onceki}{dosya_hash}".encode("utf-8")).hexdigest()
+        if kayitli_onceki != onceki or kayitli_zincir != beklenen:
+            return {"gecerli": False, "bozulan_id": id_}
+        onceki = kayitli_zincir
+        
+    return {"gecerli": True, "toplam": len(rows)}

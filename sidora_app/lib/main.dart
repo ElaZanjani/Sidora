@@ -1,5 +1,5 @@
 // ignore_for_file: deprecated_member_use, unused_field
-
+import 'config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -96,7 +96,7 @@ class _AnaEkraniState extends State<AnaEkrani> {
   }
 }
 
-// Konum Taslak Sayfası
+// Konum Taslak Sayfası (Düzeltilen Madde #3)
 class MapPage extends StatelessWidget {
   const MapPage({super.key});
 
@@ -119,12 +119,12 @@ class MapPage extends StatelessWidget {
             Icon(Icons.map_outlined, size: 64, color: const Color(0xFF0D3B2E).withOpacity(0.3)),
             const SizedBox(height: 16),
             const Text(
-              'Telefon GPS Bağlantısı Aktif',
+              'Konum özelliği geliştirme aşamasında',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E2D27)),
             ),
             const SizedBox(height: 6),
             const Text(
-              'Acil durumda konum verisi anlık mühürlenir.',
+              'Sonraki sürümlerde OpenStreetMap entegrasyonu eklenecektir.',
               style: TextStyle(fontSize: 12, color: Color(0xFF7A8D85)),
             ),
           ],
@@ -145,6 +145,7 @@ class SealPage extends StatefulWidget {
 class _SealPageState extends State<SealPage> {
   List<dynamic> _olaylar = [];
   bool _yukleniyor = true;
+  bool _zincirGecerli = true;
 
   @override
   void initState() {
@@ -154,11 +155,20 @@ class _SealPageState extends State<SealPage> {
 
   Future<void> _olaylariGetir() async {
     try {
-      final response = await http.get(Uri.parse('http://127.0.0.1:8000/events'));
+      final response = await http.get(Uri.parse('$kSunucuUrl/events'));
+      final verifyResponse = await http.get(Uri.parse('$kSunucuUrl/verify'));
+      
+      bool gecerliMi = true;
+      if (verifyResponse.statusCode == 200) {
+        final verifyData = jsonDecode(verifyResponse.body);
+        gecerliMi = verifyData['gecerli'] ?? true;
+      }
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
           _olaylar = data['olaylar'];
+          _zincirGecerli = gecerliMi;
           _yukleniyor = false;
         });
       }
@@ -211,7 +221,11 @@ class _SealPageState extends State<SealPage> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFF2E8B57).withOpacity(0.2)),
+                            border: Border.all(
+                              color: _zincirGecerli 
+                                  ? const Color(0xFF2E8B57).withOpacity(0.2)
+                                  : Colors.red.withOpacity(0.4),
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.01),
@@ -228,11 +242,19 @@ class _SealPageState extends State<SealPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(Icons.verified, size: 16, color: Color(0xFF2E8B57)),
+                                      Icon(
+                                        _zincirGecerli ? Icons.verified : Icons.gpp_bad,
+                                        size: 16,
+                                        color: _zincirGecerli ? const Color(0xFF2E8B57) : Colors.red,
+                                      ),
                                       const SizedBox(width: 6),
                                       Text(
                                         'Olay #${olay['id']}',
-                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0D3B2E)),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: _zincirGecerli ? const Color(0xFF0D3B2E) : Colors.red,
+                                        ),
                                       ),
                                     ],
                                   ),
